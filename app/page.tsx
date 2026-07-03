@@ -97,65 +97,11 @@ function getDeviceType(): 'mobile' | 'tablet' | 'desktop' {
   return 'desktop';
 }
 
-// Returns true when all options are single characters (a/b/c/d or A/B/C/D/E/F)
-// → renders compact square tiles. Otherwise full-width text buttons.
-function isCompactOptions(options: string[]): boolean {
-  return options.every(o => o.length === 1);
-}
-
-// ─── Progress Ring (immersion countdown) ──────────────────────────────────────
-
-function ProgressRing({
-  duration,
-  size = 96,
-  strokeWidth = 6,
-  onComplete,
-}: {
-  duration: number;
-  size?: number;
-  strokeWidth?: number;
-  onComplete?: () => void;
-}) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const [offset, setOffset] = useState(0);
-  const startRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const doneRef = useRef(false);
-
-  useEffect(() => {
-    doneRef.current = false;
-    startRef.current = null;
-    setOffset(0);
-
-    function frame(now: number) {
-      if (!startRef.current) startRef.current = now;
-      const elapsed = now - startRef.current;
-      const progress = Math.min(elapsed / duration, 1);
-      setOffset(circumference * progress);
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(frame);
-      } else if (!doneRef.current) {
-        doneRef.current = true;
-        onComplete?.();
-      }
-    }
-    rafRef.current = requestAnimationFrame(frame);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [duration, circumference, onComplete]);
-
-  return (
-    <svg width={size} height={size} className="rotate-[-90deg]">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={strokeWidth} />
-      <circle
-        cx={size / 2} cy={size / 2} r={radius}
-        fill="none" stroke="white" strokeWidth={strokeWidth}
-        strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-      />
-    </svg>
-  );
+// Returns grid-cols class for compact single-letter option buttons
+function compactGridCols(count: number): string {
+  if (count === 4) return 'grid-cols-4';
+  if (count === 5) return 'grid-cols-5';
+  return 'grid-cols-3'; // 6 options → 3×2
 }
 
 // ─── Timer Bar (question countdown) ──────────────────────────────────────────
@@ -318,14 +264,18 @@ function BackgroundScreen({
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">Gender</label>
-            <div className="grid grid-cols-3 gap-2">
-              {genders.map(({ label, value }) => (
+            <div className="grid grid-cols-2 gap-2">
+              {genders.slice(0, 2).map(({ label, value }) => (
                 <button key={value} onClick={() => onChange('gender', value)}
                   className={`py-3 rounded-xl border-2 text-sm font-medium transition-all ${gender === value ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`}>
                   {label}
                 </button>
               ))}
             </div>
+            <button onClick={() => onChange('gender', genders[2].value)}
+              className={`w-full py-3 rounded-xl border-2 text-sm font-medium transition-all ${gender === genders[2].value ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`}>
+              {genders[2].label}
+            </button>
           </div>
 
           <div className="space-y-2">
@@ -390,37 +340,26 @@ function AssigningScreen() {
 }
 
 function ImmersionScreen({ colour, onComplete }: { colour: Colour; onComplete: () => void }) {
-  const [seconds, setSeconds] = useState(12);
   const completeRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
-    const interval = setInterval(() => setSeconds(s => Math.max(0, s - 1)), 1000);
     const timeout = setTimeout(() => {
       if (!completeRef.current) { completeRef.current = true; onCompleteRef.current(); }
     }, IMMERSION_DURATION);
-    return () => { clearInterval(interval); clearTimeout(timeout); };
-  }, []);
-
-  const handleRingComplete = useCallback(() => {
-    if (!completeRef.current) { completeRef.current = true; onCompleteRef.current(); }
+    return () => clearTimeout(timeout);
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden experiment-screen">
+    <div className="fixed inset-0 overflow-hidden experiment-screen">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={`/stimuli/colour-${colour}.jpeg`} alt="" className="absolute inset-0 w-full h-full object-cover" aria-hidden="true" />
-      <div className="absolute inset-0 bg-black/30" />
-      <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center">
-        <p className="text-white text-2xl font-semibold drop-shadow-lg">Take a breath. Get ready.</p>
-        <div className="relative">
-          <ProgressRing duration={IMMERSION_DURATION} size={96} strokeWidth={6} onComplete={handleRingComplete} />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-white text-xl font-bold tabular-nums">{seconds}</span>
-          </div>
-        </div>
-      </div>
+      <img
+        src={`/stimuli/colour-${colour}.jpeg`}
+        alt=""
+        className="w-full h-full object-cover"
+        aria-hidden="true"
+      />
     </div>
   );
 }
@@ -432,8 +371,8 @@ function InstructionsScreen({ colour, onStart }: { colour: Colour; onStart: () =
   const textOnWhite = TEXT_ON_WHITE[colour];
 
   return (
-    <div className="min-h-screen flex flex-col px-8 py-10 experiment-screen overflow-y-auto" style={{ backgroundColor: bg }}>
-      <h1 className="text-3xl font-black tracking-[0.2em] mb-8" style={{ color: textOnBg }}>
+    <div className="min-h-screen flex flex-col px-6 py-10 experiment-screen overflow-y-auto" style={{ backgroundColor: bg }}>
+      <h1 className="text-2xl font-black tracking-[0.2em] mb-6" style={{ color: textOnBg }}>
         INSTRUCTIONS
       </h1>
 
@@ -497,7 +436,8 @@ function QuestionScreen({
   const bg = COLOUR_BG[colour];
   const textOnBg = TEXT_ON_BG[colour];
   const textOnWhite = TEXT_ON_WHITE[colour];
-  const compact = isCompactOptions(q.options);
+  const allSingleChar = q.options.every(o => o.length === 1);
+  const twoShortOptions = q.options.length === 2 && q.options.every(o => o.length <= 12);
 
   useEffect(() => {
     answeredRef.current = false;
@@ -519,31 +459,31 @@ function QuestionScreen({
   return (
     <div className="min-h-screen flex flex-col experiment-screen">
       {/* White sticky header: progress + timer + question prompt */}
-      <div className="sticky top-0 z-20 bg-white px-6 pt-5 pb-4 shadow-sm">
+      <div className="sticky top-0 z-20 bg-white px-5 pt-4 pb-3 shadow-sm">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-400 font-medium">Question {qIndex + 1} of 5</span>
+          <span className="text-xs text-gray-400 font-medium tracking-wide">Q {qIndex + 1} / 5</span>
           <div className="flex gap-1.5">
             {QUESTIONS.map((_, i) => (
               <div
                 key={i}
-                className="h-1.5 w-6 rounded-full"
+                className="h-1.5 w-5 rounded-full"
                 style={{ backgroundColor: i <= qIndex ? bg : '#E5E7EB' }}
               />
             ))}
           </div>
         </div>
         <TimerBar key={qIndex} duration={QUESTION_TIMEOUT} onExpire={handleExpire} barColour={bg} />
-        <h2 className="text-xl font-bold mt-3 leading-snug" style={{ color: textOnWhite }}>
+        <h2 className="text-base font-bold mt-2 leading-snug" style={{ color: textOnWhite }}>
           {q.prompt}
         </h2>
       </div>
 
       {/* Solid colour body: image card + answer buttons */}
       <div
-        className="flex-1 flex flex-col px-5 py-5 gap-5"
+        className="flex-1 flex flex-col px-4 py-4 gap-4"
         style={{ backgroundColor: bg }}
       >
-        {q.image ? (
+        {q.image && (
           <div className="bg-white rounded-2xl p-3 flex justify-center shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -551,45 +491,58 @@ function QuestionScreen({
               alt={`Question ${q.id} stimulus`}
               draggable={false}
               className="rounded-lg block"
-              style={{ maxWidth: '100%', maxHeight: '44vh', width: 'auto', height: 'auto', objectFit: 'contain' }}
+              style={{ maxWidth: '100%', maxHeight: '42vh', width: 'auto', height: 'auto', objectFit: 'contain' }}
             />
           </div>
-        ) : (
-          /* Q5: no image, just a spacer so buttons sit in the coloured area */
-          <div className="flex-1" />
         )}
 
-        {/* Answer buttons */}
-        {compact ? (
-          /* Single-letter options (a/b/c/d, A-F): compact square tiles */
-          <div className="flex flex-wrap justify-center gap-3 pb-4">
-            {q.options.map(option => (
-              <button
-                key={option}
-                onClick={() => handleAnswer(option)}
-                className="w-14 h-14 bg-white rounded-2xl font-black text-2xl flex items-center justify-center active:scale-[0.94] transition-transform shadow-sm"
-                style={{ color: textOnWhite }}
-                aria-label={`Option ${option}`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        ) : (
-          /* Long-text options (Left/Right, Ticket A/B): full-width stacked */
-          <div className="space-y-3 pb-4">
-            {q.options.map(option => (
-              <button
-                key={option}
-                onClick={() => handleAnswer(option)}
-                className="w-full py-5 px-5 bg-white rounded-2xl font-bold text-base text-left active:scale-[0.98] transition-transform shadow-sm"
-                style={{ color: textOnWhite }}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Answer buttons — layout adapts to option type and count */}
+        <div className="mt-auto pb-3">
+          {allSingleChar ? (
+            /* Single-letter options: responsive CSS grid, buttons fill available width */
+            <div className={`grid ${compactGridCols(q.options.length)} gap-2`}>
+              {q.options.map(option => (
+                <button
+                  key={option}
+                  onClick={() => handleAnswer(option)}
+                  className="aspect-square bg-white rounded-2xl font-black text-xl flex items-center justify-center active:scale-[0.94] transition-transform shadow-sm"
+                  style={{ color: textOnWhite }}
+                  aria-label={`Option ${option}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : twoShortOptions ? (
+            /* Two short options (Left/Right): side by side */
+            <div className="grid grid-cols-2 gap-3">
+              {q.options.map(option => (
+                <button
+                  key={option}
+                  onClick={() => handleAnswer(option)}
+                  className="py-5 bg-white rounded-2xl font-bold text-base flex items-center justify-center active:scale-[0.97] transition-transform shadow-sm"
+                  style={{ color: textOnWhite }}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            /* Long-text options (Ticket A / Ticket B): stacked full-width */
+            <div className="space-y-3">
+              {q.options.map(option => (
+                <button
+                  key={option}
+                  onClick={() => handleAnswer(option)}
+                  className="w-full py-4 px-5 bg-white rounded-2xl font-bold text-sm text-left active:scale-[0.98] transition-transform shadow-sm leading-snug"
+                  style={{ color: textOnWhite }}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -613,10 +566,10 @@ function BetScreen({
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-6 py-12 experiment-screen"
+      className="min-h-screen flex flex-col items-center justify-center px-5 py-8 experiment-screen"
       style={{ backgroundColor: bg }}
     >
-      <div className="max-w-md w-full space-y-8">
+      <div className="w-full max-w-sm space-y-6">
         {wasTimeout ? (
           <>
             <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
@@ -635,20 +588,20 @@ function BetScreen({
           </>
         ) : (
           <>
-            <p className="text-2xl font-bold text-center" style={{ color: textOnBg }}>
+            <p className="text-xl font-bold text-center" style={{ color: textOnBg }}>
               Place a bet on your choice:
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               {BET_OPTIONS.map(bet => (
                 <button
                   key={bet}
                   onClick={() => onBet(bet)}
-                  className="py-8 bg-white rounded-2xl font-black text-4xl flex flex-col items-center justify-center active:scale-[0.96] transition-transform shadow-sm"
+                  className="py-6 bg-white rounded-2xl font-black text-4xl flex flex-col items-center justify-center active:scale-[0.96] transition-transform shadow-sm"
                   style={{ color: textOnWhite }}
                 >
                   {bet}
-                  <span className="text-xs font-semibold mt-1 opacity-60">points</span>
+                  <span className="text-xs font-semibold mt-1 opacity-60">pts</span>
                 </button>
               ))}
             </div>
