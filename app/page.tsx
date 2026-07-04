@@ -7,7 +7,7 @@ import type { Colour, AgeBand, Gender, ColourVision, QuestionAnswer } from '@/li
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const IMMERSION_DURATION = 12_000;
-const QUESTION_TIMEOUT = 8_000;
+const QUESTION_TIMEOUT = 15_000;
 
 // Question order and options match the PDF questionnaires exactly
 const QUESTIONS = [
@@ -386,7 +386,7 @@ function InstructionsScreen({ colour, onStart }: { colour: Colour; onStart: () =
 
         <p className="pt-2 font-bold">For each question:</p>
         <ul className="space-y-2 pl-4">
-          <li className="flex gap-2"><span>•</span><span>Choose your answer within 8 seconds.</span></li>
+          <li className="flex gap-2"><span>•</span><span>Choose your answer within 15 seconds.</span></li>
           <li className="flex gap-2 items-start">
             <span>•</span>
             <span>
