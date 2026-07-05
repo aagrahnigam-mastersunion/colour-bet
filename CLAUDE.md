@@ -1,1 +1,2 @@
 @AGENTS.md
+@QUIZ_LOGIC.md
