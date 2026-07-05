@@ -3,8 +3,8 @@ import { getSupabase } from '@/lib/supabase';
 import type { Colour } from '@/lib/types';
 
 const COLOURS: Colour[] = ['red', 'yellow', 'green', 'blue'];
-const TARGET_PER_COLOUR = 10;
-const MAX_PER_COLOUR = 12; // buffer for dropouts
+const TARGET_PER_COLOUR = 50;
+const MAX_PER_COLOUR = 60; // buffer for dropouts
 
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
